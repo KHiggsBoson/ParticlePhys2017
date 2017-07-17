@@ -1,0 +1,187 @@
+//break; will tell code to stop reading after point
+
+void DrawHistos(TString infile = "histos.root"){
+    set_plot_style();
+    gStyle->SetOptStat(0);
+    gStyle->SetOptTitle(0);
+    
+    
+    TFile *_file0 = TFile::Open(infile);
+    TH1* hHardPartonspT = (TH1*)gROOT->FindObject("hHardPartonspT");
+    TH1* hHardPartonsName = (TH1*)gROOT->FindObject("hHardPartonsName");
+    TH1* hParticlepT = (TH1*)gROOT->FindObject("hParticlepT");
+    TH2* hParticleEtaPhi = (TH2*)gROOT->FindObject("hParticleEtaPhi");
+    //TH2* hDeltaPhiMomentum = (TH2*)gROOT->FindObject("hDeltaPhiMomentum");  //My addition
+    
+    TH2* hDeltaPhiMomentum[4];
+    char associated[50];
+    for (int j=0; j<4; j++){
+        hDeltaPhiMomentum[j] = (TH2*)gROOT->FindObject(Form("hDeltaPhiMomentum%i",j));
+    }
+    
+    //Define arrays for later
+    
+    TH1* HistProjection[16];                  //array for 16 histograms
+    char legend[50];                 //used in making legend for display, 50 is ambiguous, if you dont give info for all of them, then only the ones with enough info show up
+    double bin0[5];                 //use for splitting bins, which we actually need to cut the P associated. We can't do it any other way, we must use the bins
+    double bin1[5];
+    double bin2[5];
+    double bin3[5];
+    double bin[5]={0.5, 1.0, 1.5, 2.5, 4.0};     //gives associated cuts
+    
+    
+    
+    
+    TCanvas* can1 = new TCanvas("can1","",600,600);
+    gPad->SetLeftMargin(0.15);
+    gPad->SetLogy();
+    SetHist(hParticlepT,"p_{T} (GeV/c)","Counts",2);
+    SetHist(hHardPartonspT,"p_{T} (GeV/c)","Counts",1);
+    hParticlepT->Draw();
+    hHardPartonspT->Draw("same");
+    TLegend* leg1 = new TLegend(0.6,0.7,0.85,0.85);
+    SetLeg(leg1);
+    leg1->AddEntry(hHardPartonspT,"Hard Parton","L");
+    leg1->AddEntry(hParticlepT,"Final Particles","L");
+    leg1->Draw();
+    can1->SaveAs("pTgraph.png");
+    
+    TCanvas* can2 = new TCanvas("can2","",600,600);
+    gPad->SetLeftMargin(0.15);
+    SetHist(hHardPartonsName,"parton ID","Counts",1);
+    hHardPartonsName->Draw();
+    
+    TCanvas* can3 = new TCanvas("can3","",600,600);
+    gPad->SetLeftMargin(0.15);
+    SetHist(hParticleEtaPhi,"#eta","#phi",1);
+    hParticleEtaPhi->Draw("COLZ");
+    
+   /* for (int j=0; j<1; j++){                            //gaussian attempt
+        
+        histname = Form("gausfit1[%i]",j);
+        TF1 * gausfit1[j] = new TF1(Form("gausfit1[%i]",j), hDeltaPhiMomentum[j],-1,1.4);
+        gausfit1[j]->SetParameter(0,25);
+        gausfit1[j]->SetParameter(1,0);
+        gausfit1[j]->SetParameter(2,0.7);
+        
+        histname = Form("gausfit2[%i]",j);
+        TF1 * gausfit2[j] = new TF1(Form("gausfit2[%i]",j), hDeltaPhiMomentum[j],1.4, 2*TMath::Pi()-1);
+        gausfit2[j]->SetParameter(0,20);
+        gausfit2[j]->SetParameter(1,3.3);
+        gausfit2[j]->SetParameter(2,1);
+        
+        hist -> fit(gausfit1[0]);
+        //hist -> fit(gausfit2[j]);
+        
+        gausfit1[0]->Draw();
+        //gausfit2[j]->Draw();
+        
+        
+        
+        
+        TCanvas* can(j+4) = new TCanvas(Form("can%i",j+4)," ",600,600);          //Need to figure out hgausfit1 vs hgausfit1-[j], etc
+        gPad->SetLeftMargin(0.15);
+        SetHist(gausfit1[j], "Momentum fit", "#phi",1);
+        gausfit1[j]->Draw();
+        
+        TCanvas* can(j+8) = new TCanvas(Form("can%i",j+8,)" ",600,600);
+        gPad->SetLeftMargin(0.15);
+        SetHist(gausfit2[j], "Momentum fit", "#phi",1);
+        gausfit2[j]->Draw();
+    } */
+    
+    //Find bin numbers for cuts of P associative
+    for (int j=0; j<5; j++){
+        
+        bin0[j]= hDeltaPhiMomentum[0]->GetYaxis()->FindBin(bin[j]);   //figures out which bins make the cut for momentum ranges which were defined in other file
+        bin1[j]= hDeltaPhiMomentum[1]->GetYaxis()->FindBin(bin[j]);
+        bin2[j]= hDeltaPhiMomentum[2]->GetYaxis()->FindBin(bin[j]);
+        bin3[j]= hDeltaPhiMomentum[3]->GetYaxis()->FindBin(bin[j]);
+    }
+    
+    //Project y axis for P associative
+    for (int j=0; j<4; j++){                                        //takes care of first row
+        //Forms info together
+        HistProjection[j] = hDeltaPhiMomentum[0]->ProjectionX(Form("HistProjection%i",j),bin0[j],bin0[j+1]);
+        HistProjection[j+4] = hDeltaPhiMomentum[1]->ProjectionX(Form("HistProjection%i",j+4),bin1[j],bin1[j+1]);
+        HistProjection[j+8] = hDeltaPhiMomentum[2]->ProjectionX(Form("HistProjection%i",j+8),bin2[j],bin2[j+1]);
+        HistProjection[j+12] = hDeltaPhiMomentum[3]->ProjectionX(Form("HistProjection%i",j+12),bin3[j],bin3[j+1]);
+        
+    }
+    cout<<"thru the loop"<<endl;
+    
+    TCanvas* can4 = new TCanvas("can4","",1000,500);     //my addition
+    can4->Divide(4,4);      //divides into 4x4
+    
+    
+    
+    //normalization attempt
+    
+    double NormTrig0 = hParticlepT->Integral(hParticlepT->FindBin(2.5),hParticlepT->FindBin(3.0));  //find number of trigger events in given momentum ranges for hParticlepT
+    double NormTrig1 = hParticlepT->Integral(hParticlepT->FindBin(3.0),hParticlepT->FindBin(4.0));
+    double NormTrig2 = hParticlepT->Integral(hParticlepT->FindBin(4.0),hParticlepT->FindBin(6.0));
+    double NormTrig3 = hParticlepT->Integral(hParticlepT->FindBin(6.0),hParticlepT->FindBin(10.0));
+    Double_t norm = 1;
+    double BinWidth = HistProjection[0]->GetBinWidth(1);
+    
+    cout<<"BinWidth"<<BinWidth<<endl;
+    cout<<"NormTrig0"<<NormTrig0<<endl;
+    
+    for (int j=0; j<16; j++) {
+        can4->cd(j+1);
+        gPad->SetLeftMargin(0.15);
+        SetHist(HistProjection[j], "Delta Phi", "Counts (Normalized)" ,1);
+        
+        if (j==0 || j==4 || j==8 || j==12)
+            HistProjection[j]->Scale(norm/(BinWidth*NormTrig0));
+        if (j==1 || j==5 || j==9 || j==13)
+            HistProjection[j]->Scale(norm/(BinWidth*NormTrig1));
+        if (j==2 || j==6 || j==10 || j==14)
+            HistProjection[j]->Scale(norm/(BinWidth*NormTrig2));
+        if (j==3 || j==7 || j==11 || j==15)
+            HistProjection[j]->Scale(norm/(BinWidth*NormTrig3));
+        
+        
+        
+        
+        
+        HistProjection[j]->Draw();
+    }
+}
+
+void set_plot_style()
+{
+    const Int_t NRGBs = 5;
+    const Int_t NCont = 255;
+    Double_t stops[NRGBs] = { 0.00, 0.34, 0.61, 0.84, 1.00 };
+    Double_t red[NRGBs]   = { 0.00, 0.00, 0.87, 1.00, 0.51 };
+    Double_t green[NRGBs] = { 0.00, 0.81, 1.00, 0.20, 0.00 };
+    Double_t blue[NRGBs]  = { 0.51, 1.00, 0.12, 0.00, 0.00 };
+    TColor::CreateGradientColorTable(NRGBs, stops, red, green, blue, NCont);
+    gStyle->SetNumberContours(NCont);
+}
+void SetHist(TH1* h, char* xt ="", char* yt ="",int color = 1, int marker = 20,int width = 3, float size = 1.0)
+{
+    h->SetLineWidth(width);
+    h->SetLineColor(color);
+    h->SetMarkerColor(color);
+    h->SetMarkerSize(size);
+    h->SetMarkerStyle(marker);
+    h->GetYaxis()->SetTitle(yt);
+    h->GetYaxis()->SetTitleOffset(1.6);
+    h->GetXaxis()->SetTitle(xt);
+}
+
+void SetHist(TH1* h, int color = 1)
+{
+    h->SetLineWidth(3);
+    h->SetLineColor(color);
+    h->SetMarkerColor(color);
+    h->SetMarkerSize(1);
+}
+
+void SetLeg(TLegend* l,float txtsize=0.03){
+    l->SetBorderSize(0);
+    l->SetFillColor(0);
+    l->SetTextSize(txtsize);
+}
