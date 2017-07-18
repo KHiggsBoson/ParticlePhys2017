@@ -1,0 +1,98 @@
+//
+//  BackgroundTree.cpp
+//  
+//
+//  Created by Kyle Higgins on 7/18/17.
+//
+//
+
+#include <stdio.h>
+#include "TSystem.h"
+#include "TROOT.h"
+#include "TFile.h"
+#include "TTree.h"
+#include "TH1.h"
+#include "TH2.h"
+#include "TClonesArray.h"
+#include "TBranch.h"
+#include "TLorentzVector.h"
+#include "TParameter.h"
+#include "TRandom3.h"
+#include <iostream>
+#include <cmath>
+#include <exception>
+
+
+using namespace std;
+
+
+
+int main(int argc, const char** argv)
+{
+    const char *defaults[6] = {"readPythiaTree","test.root","in"}; //Don't know what this sets up
+    if ( argc==1 ) {
+        argv=defaults;
+        argc=3;
+    }
+    TString InFileName = argv[1];
+    TString OutFileName = argv[2];
+    
+    static const Int_t kmaxT = 5000;
+    
+    TFile *_file0 = TFile::Open(InFileName);        //reads tree
+    TTree* intree = (TTree*)gROOT->FindObject("tree");
+    TFile *file1 = TFile::Open(OutFileName.Data(),"RECREATE");
+    TTree* tree = intree->CloneTree(0);
+    TClonesArray *Background = new TClonesArray("TLorentzVector",kmaxT);
+    tree->Branch("Background", &Background);
+    
+    TRandom3* random = new TRandom3;            //Sets up for background
+    random->SetSeed(5000);
+   
+    
+    Int_t entries = intree->GetEntries();
+    cout<<entries<<endl;
+    for (Int_t iev = 0;iev<entries;iev++){   //This is where you run over events
+        //Looping over number of events
+        if (iev % 100 == 0)
+            cout<<iev<<endl;
+        
+        Background->Clear();
+        intree->GetEntry(iev);
+        
+        //Attempt to add background
+        
+        int Ntracks = 1200;                           //Number of tracks; i set it low but should be 1200 ultimately
+        float pT0 = 0.500;
+        int ipart_bkgd = 0;
+        
+        
+        double rand; double pT; double phi; double eta;
+        for (int i = 0;i<Ntracks;i++){
+            rand = random->Rndm();
+            pT = -pT0*log(1 - rand);
+            rand = random->Rndm();
+            phi = TMath::Pi()*2.*rand;
+            rand = random->Rndm();
+            eta = 2*(rand-0.5);
+            TLorentzVector* t = new TLorentzVector();
+            t->SetPtEtaPhiM(pT,eta,phi,.135);          //last number is mass (.135 is pion i think)
+            new ((*Background)[ipart_bkgd]) TLorentzVector(*t);
+            ipart_bkgd++;
+        }
+        
+        tree->Fill();
+                  } //end of event loop
+    
+    
+    
+    //cout<<"Finish "<<endl;
+    
+    
+    
+    //Open output file and save the histograms
+  
+    
+    tree->Write();
+    return 0;
+}
