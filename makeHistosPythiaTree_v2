@@ -1,0 +1,281 @@
+#include "TSystem.h"
+#include "TROOT.h"
+#include "TFile.h"
+#include "TTree.h"
+#include "TH1.h"
+#include "TH2.h"
+#include "TClonesArray.h"
+#include "TBranch.h"
+#include "TLorentzVector.h"
+#include "TParameter.h"
+#include "TRandom3.h"
+#include <iostream>
+#include <cmath>
+#include <exception>
+
+
+using namespace std;
+
+/*float dphi(float phi1, float phi2){     //define change in angle and the angles
+ float delta = (phi1-phi2);
+ if (delta < -1)
+ delta  += 2*TMath::Pi();        //adjusts range so angles outside of 2pi
+ //circumference are put in
+ if (delta > (-1 + 2*TMath::Pi()))
+ delta = delta - 2*TMath::Pi();
+ return delta;
+ }*/                                 //Rosi originally did this but I do this again later, so its commented out, I dont think this causes any trouble
+
+
+int main(int argc, const char** argv)
+{
+    const char *defaults[6] = {"readPythiaTree","test.root","in"}; //Don't know what this sets up
+    if ( argc==1 ) {
+        argv=defaults;
+        argc=3;
+    }
+    TString InFileName = argv[1];
+    TString OutFileName = argv[2];
+    
+    TFile *_file0 = TFile::Open(InFileName);        //reads tree
+    TTree* tree = (TTree*)gROOT->FindObject("tree");
+    
+    //read collections
+    TClonesArray *HardPartons = new TClonesArray("TLorentzVector");
+    TBranch* bHardPartons = tree->GetBranch("HardPartons");
+    bHardPartons->SetAddress(&HardPartons);
+    TClonesArray *HardPartonNames = new TClonesArray("TParameter<int>");
+    TBranch* bHardPartonNames = tree->GetBranch("HardPartonNames");
+    bHardPartonNames->SetAddress(&HardPartonNames);
+    TClonesArray *particles = new TClonesArray("TLorentzVector");
+    TBranch* bparticles = tree->GetBranch("Particles");
+    bparticles->SetAddress(&particles);
+    TClonesArray *Background = new TClonesArray("TLorentzVector");
+    TBranch* bBackground = tree->GetBranch("Background");
+    bBackground->SetAddress(&Background);
+    
+    
+    //First create the histograms that will be filled with >> command
+    TString histname("hHardPartonspT");
+    TH1F* hHardPartonspT = new TH1F(histname,histname,100,0,100);  //defines new histogram for transverse momentum
+    histname.Prepend("sqrt(HardPartons.fP.fX*HardPartons.fP.fX+HardPartons.fP.fY*HardPartons.fP.fY)>>");
+    tree->Draw(histname);           //draws histogram
+    
+    histname = "hHardPartonsName";
+    TH1F* hHardPartonsName = new TH1F(histname,histname,40,-9.5,30.5); //defines new histogram for I don't know why
+    histname.Prepend("HardPartonNames.fVal>>");
+    tree->Draw(histname);
+    
+    //Next book the histograms that will be filled event by event
+    histname = "hParticlepT";
+    TH1F* hParticlepT = new TH1F(histname,histname,100,0,100);  //new histogram for particle transverse momentum
+    histname = "hParticlepTBack";
+    TH1F* hParticlepTBack = new TH1F(histname,histname,100,0,100);  //new histogram for particle transverse momentum and background
+    
+    
+    histname = "hParticleEtaPhi";
+    TH2F* hParticleEtaPhi = new TH2F(histname,histname,100,-1,1,100,-6.2,6.2); //new 2D histogram for angular and I think lengthwise distribution
+    
+    
+    
+    
+    
+    
+    //This is my addition:
+    
+    
+    histname = "hDeltaPhiMomentum";
+    TH2F * hDeltaPhiMomentum[4];        //Defines an array to reduce code from 16 loops to four
+    for(int j=0; j<4; j++){
+        hDeltaPhiMomentum[j]= new TH2F(Form("hDeltaPhiMomentum%i",j),Form("hDeltaPhiMomentum%i",j),100,-1,2*TMath::Pi()-1,100,-5,5);
+        ; //Form command takes care of naming, gives new name each loop
+    }
+    
+    histname = "hDeltaPhiMomentumBack";
+    TH2F * hDeltaPhiMomentumBack[4];        //Defines an array to reduce code from 16 loops to four
+    for(int j=0; j<4; j++){
+        hDeltaPhiMomentumBack[j]= new TH2F(Form("hDeltaPhiMomentumBack%i",j),Form("hDeltaPhiMomentumBack%i",j),100,-1,2*TMath::Pi()-1,100,-5,5);
+        ;
+    }
+    
+    histname = "hDeltaPhiMomentumBackIso";
+    TH2F * hDeltaPhiMomentumBackIso = new TH2F(histname, histname, 100, -1,2*TMath::Pi()-1,100,-6.2,6.2);
+    
+    
+    Int_t entries = tree->GetEntries();
+    cout<<entries<<endl;
+    
+    for (Int_t iev = 0;iev<entries;iev++){   //This is where you run over events
+        //Looping over number of events
+        if (iev % 100 == 0)
+            cout<<iev<<endl;
+        
+        
+        
+        //Get all the particles in the event
+        tree->GetEntry(iev);
+        bHardPartons->GetEntry(iev);
+        bHardPartonNames->GetEntry(iev);
+        bparticles->GetEntry(iev);
+        bBackground->GetEntry(iev);
+        
+        int trackn = -1;                        //set negative so when it fills for larger values, we will never miss a possible value
+        
+        //loop over final state particles
+        Int_t nparticles = particles->GetEntries();
+        Int_t nBackground = Background->GetEntries();
+        for (int ip = 0; ip<nparticles;ip++){
+            //Find each particle
+            TLorentzVector* particle = (TLorentzVector*)particles->At(ip);
+            //Manipulate particles and fill histograms
+            hParticlepT->Fill(particle->Pt());
+            hParticlepTBack->Fill(particle->Pt());
+            hParticleEtaPhi->Fill(particle->Eta(),particle->Phi());
+            
+        }
+        for (int ip = 0; ip<nBackground;ip++){
+            TLorentzVector* background = (TLorentzVector*)Background->At(ip);
+            hParticlepTBack->Fill(background->Pt());
+            //hParticleEtaPhi(Back?)->Fill(background->Eta(),background->Phi());
+            
+        }
+        
+        hParticlepT->Fill(Ptrig);                 //shouold make 2 histograms to plot ptrig alone and passo Rosi said
+         hParticlepTBack->Fill(Ptrig);
+        float delta;                            //delta for pythia alone and pythia+background
+        float deltabackiso;                     //delta for background alone; I may actually not need this because comparison angle for background alone is ambiguous: there is no angular dependence
+        float Ptrig;
+        TLorentzVector* TriggerParticle;
+        TLorentzVector* AssociatedParticle;
+        
+        
+        for (int ip=0; ip<nparticles; ip++){
+            TLorentzVector* particleA = (TLorentzVector*)particles->At(ip);
+            if (particleA->Pt()<2.5 || particleA->Pt()>10.0)
+                continue;
+            
+            TriggerParticle = particleA;                //makes trigger cut
+            Ptrig = TriggerParticle->Pt();
+            
+            for (int jp=0; jp<nparticles; jp++){
+                TLorentzVector* particleB = (TLorentzVector*)particles->At(jp);
+                
+                if (particleB->Pt() < 4.0||particleB->Pt() > .5){
+                    
+                    
+                    AssociatedParticle = particleB;     //makes associated cut
+                    trackn = ip;
+                    if (AssociatedParticle == TriggerParticle) continue;    //eliminates self and double counting
+                    if (AssociatedParticle->Pt() > TriggerParticle->Pt()) continue;
+                    else
+                        delta = TriggerParticle->Phi() - AssociatedParticle->Phi();
+                    
+                    if (delta<-1)
+                        delta = delta + 2*TMath::Pi();
+                    if (delta>2*TMath::Pi()-1)
+                        delta = delta - 2*TMath::Pi();
+                    
+                    
+                    
+                    if (Ptrig>2.5 && Ptrig<3.0){           //set up cut in trigger momentum
+                        hDeltaPhiMomentumBack[0]->Fill(delta,AssociatedParticle->Pt());
+                        hDeltaPhiMomentum[0]->Fill(delta,AssociatedParticle->Pt());
+                    }
+                    
+                    if (Ptrig>3.0 && Ptrig<4.0){
+                        hDeltaPhiMomentumBack[1]->Fill(delta,AssociatedParticle->Pt());
+                        hDeltaPhiMomentum[1]->Fill(delta,AssociatedParticle->Pt());
+                    }
+                    
+                    if (Ptrig>4.0 && Ptrig<6.0){
+                        hDeltaPhiMomentumBack[2]->Fill(delta,AssociatedParticle->Pt());
+                        hDeltaPhiMomentum[2]->Fill(delta,AssociatedParticle->Pt());
+                    }
+                    
+                    if (Ptrig>6.0 && Ptrig<10.0){
+                        hDeltaPhiMomentumBack[3]->Fill(delta,AssociatedParticle->Pt());
+                        hDeltaPhiMomentum[3]->Fill(delta,AssociatedParticle->Pt());
+                    }
+                    
+                }
+                else continue;
+                    }
+            
+            
+            
+            for (int jp=0; jp<nBackground; jp++){
+                TLorentzVector* BackgroundB = (TLorentzVector*)Background->At(jp);
+                
+                if (BackgroundB->Pt() < 4.0||BackgroundB->Pt() > .5){
+                    
+                    
+                    AssociatedParticle = BackgroundB;
+                    trackn = ip;
+                    
+                    if (AssociatedParticle == TriggerParticle) continue;
+                    if (AssociatedParticle->Pt() > TriggerParticle->Pt()) continue;
+                    else
+                        delta = TriggerParticle->Phi() - AssociatedParticle->Phi();
+                    deltabackiso = AssociatedParticle->Phi();
+                    
+                    if (delta<-1)
+                        delta = delta + 2*TMath::Pi();
+                    if (delta>2*TMath::Pi()-1)
+                        delta = delta - 2*TMath::Pi();
+                    
+                    if (deltabackiso<-1)
+                        deltabackiso = deltabackiso + 2*TMath::Pi();
+                    if (deltabackiso>2*TMath::Pi()-1)
+                        deltabackiso = deltabackiso - 2*TMath::Pi();
+                    
+                    
+                    hDeltaPhiMomentumBackIso->Fill(deltabackiso, AssociatedParticle->Pt());
+                    
+                    if (Ptrig>2.5 && Ptrig<3.0)             //set up cut in trigger momentum
+                        hDeltaPhiMomentumBack[0]->Fill(delta,AssociatedParticle->Pt());
+                    
+                    if (Ptrig>3.0 && Ptrig<4.0)
+                        hDeltaPhiMomentumBack[1]->Fill(delta,AssociatedParticle->Pt());
+                    
+                    if (Ptrig>4.0 && Ptrig<6.0)
+                        hDeltaPhiMomentumBack[2]->Fill(delta,AssociatedParticle->Pt());
+                    
+                    if (Ptrig>6.0 && Ptrig<10.0)
+                        hDeltaPhiMomentumBack[3]->Fill(delta,AssociatedParticle->Pt());
+                    
+                    
+                }
+                else continue;
+                    }
+            
+            
+        }
+        
+        
+    }
+    //end of event loop
+    
+    
+    
+    //Open output file and save the histograms
+    TFile *file1 = TFile::Open(OutFileName.Data(),"RECREATE");
+    
+    hHardPartonspT->Write();
+    hHardPartonsName->Write();
+    hParticlepT->Write();
+    hParticlepTBack->Write();
+    hParticleEtaPhi->Write();
+    
+    //My addition
+    hDeltaPhiMomentum[0]->Write();
+    hDeltaPhiMomentum[1]->Write();
+    hDeltaPhiMomentum[2]->Write();
+    hDeltaPhiMomentum[3]->Write();
+    
+    hDeltaPhiMomentumBack[0]->Write();
+    hDeltaPhiMomentumBack[1]->Write();
+    hDeltaPhiMomentumBack[2]->Write();
+    hDeltaPhiMomentumBack[3]->Write();
+    
+    hDeltaPhiMomentumBackIso->Write();
+}
