@@ -1,0 +1,357 @@
+#include "TSystem.h"
+#include "TROOT.h"
+#include "TFile.h"
+#include "TTree.h"
+#include "TH1.h"
+#include "TH2.h"
+#include "TH3.h"
+#include "TClonesArray.h"
+#include "TBranch.h"
+#include "TLorentzVector.h"
+#include "TParameter.h"
+#include "TRandom3.h"
+#include <iostream>
+#include <cmath>
+#include <exception>
+
+
+using namespace std;
+
+float dphi(float phi1, float phi2){
+    float delta = (phi1-phi2);
+    if (delta < -1)
+        delta  += 2*TMath::Pi();
+    if (delta > (-1 + 2*TMath::Pi()))
+        delta = delta - 2*TMath::Pi();
+    return delta;
+}
+
+float deta(float eta1, float eta2){
+    float eta = (eta1 - eta2);
+    if (eta < -1)
+        eta += 2;
+    if (eta > 1)
+        eta = eta - 2;
+    return eta;
+}
+
+int main(int argc, const char** argv)
+{
+    const char *defaults[6] = {"readPythiaTree","test.root","in"}; //Don't know what this sets up
+    if ( argc==1 ) {
+        argv=defaults;
+        argc=3;
+    }
+    TString InFileName = argv[1];
+    TString OutFileName = argv[2];
+    
+    TFile *_file0 = TFile::Open(InFileName);        //reads tree
+    TTree* tree = (TTree*)gROOT->FindObject("tree");
+    
+    cout<<"Input file is: "<<InFileName.Data()<<endl;
+    cout<<"Output file is: "<<OutFileName.Data()<<endl;
+    
+    //read collections
+    TClonesArray *HardPartons = new TClonesArray("TLorentzVector");
+    TBranch* bHardPartons = tree->GetBranch("HardPartons");
+    bHardPartons->SetAddress(&HardPartons);
+    TClonesArray *HardPartonNames = new TClonesArray("TParameter<int>");
+    TBranch* bHardPartonNames = tree->GetBranch("HardPartonNames");
+    bHardPartonNames->SetAddress(&HardPartonNames);
+    TClonesArray *particles = new TClonesArray("TLorentzVector");
+    TBranch* bparticles = tree->GetBranch("Particles");
+    bparticles->SetAddress(&particles);
+    TClonesArray *Background = new TClonesArray("TLorentzVector");
+    TBranch* bBackground = tree->GetBranch("Background");
+    bBackground->SetAddress(&Background);
+    
+    
+    //First create the histograms that will be filled with >> command
+    TString histname("hHardPartonspT");
+    TH1F* hHardPartonspT = new TH1F(histname,histname,100,100,100);  //defines new histogram for transverse momentum
+    histname.Prepend("sqrt(HardPartons.fP.fX*HardPartons.fP.fX+HardPartons.fP.fY*HardPartons.fP.fY)>>");
+    tree->Draw(histname);           //draws histogram
+    histname = "hHardPartonsName";
+    TH1F* hHardPartonsName = new TH1F(histname,histname,40,-9.5,30.5); //defines new histogram for I don't know why
+    histname.Prepend("HardPartonNames.fVal>>");
+    tree->Draw(histname);
+    //Next book the histograms that will be filled event by event
+    histname = "hParticlepT";
+    TH1F* hParticlepT = new TH1F(histname,histname,100,100,100);  //new histogram for particle transverse momentum
+    histname = "hParticlePhi";
+    TH1F* hParticlePhi = new TH1F("hParticlePhi", "", 100,-4,4);
+    
+    histname = "hParticleEta";
+    TH1F* hParticleEta = new TH1F("hParticleEta", "", 100,-1,1);
+    
+    histname = "hParticlepTBack";
+    TH1F* hParticlepTBack = new TH1F(histname,histname,100,100,100);  //new histogram for particle transverse momentum and background
+    histname = "hBackgroundpT";
+    TH1F* hBackgroundpT = new TH1F("hBackgroundpT", "", 100,100,100);
+
+    histname = "hBackgroundPhi";
+    TH1F* hBackgroundPhi = new TH1F("hBackgroundPhi", "", 100,-4,4);
+    
+    histname = "hBackgroundEta";
+    TH1F* hBackgroundEta = new TH1F("hBackgroundEta", "", 100,-1,1);
+    
+    histname = "hParticleEtaPhi";
+    TH2F* hParticleEtaPhi = new TH2F(histname,histname,100,-2,6,100,-1,1); //new 2D histogram for angular and I think lengthwise distribution
+    histname = "hBackgroundEtaPhi";
+    TH2F* hBackgroundEtaPhi = new TH2F(histname,histname,100,-2,6,100,-1,1); //
+    histname = "hParticleDEtaDPhi";
+    TH2F* hParticleDEtaDPhi = new TH2F(histname, histname, 100,-1,5,100,-1,1);
+    histname = "hBackgroundDEtaDPhi";
+    TH2F* hBackgroundDEtaDPhi = new TH2F(histname, histname, 100,-1,5,100,-1,1);
+    histname = "hBothDEtaDPhi";
+    TH2F* hBothDEtaDPhi = new TH2F(histname, histname, 100, -1,5,100,-1,1);
+    
+    histname = "hDeltaPhiMomentum";
+    TH2F * hDeltaPhiMomentum[4];        //Defines an array to reduce code from 16 loops to four
+    for(int j=0; j<4; j++){
+        hDeltaPhiMomentum[j]= new TH2F(Form("hDeltaPhiMomentum%i",j),Form("hDeltaPhiMomentum%i",j),100,-1,2*TMath::Pi()-1,50,0,5);
+        ; //Form command takes care of naming, gives new name each loop
+    }
+    histname = "hDeltaPhiMomentumBack";
+    TH2F * hDeltaPhiMomentumBack[4];        //Defines an array to reduce code from 16 loops to four
+    for(int j=0; j<4; j++){
+        hDeltaPhiMomentumBack[j]= new TH2F(Form("hDeltaPhiMomentumBack%i",j),Form("hDeltaPhiMomentumBack%i",j),100,-1,2*TMath::Pi()-1,50,0,5);
+        ;
+    }
+    histname = "hDeltaPhiMomentumBackAlt";
+    TH2F * hDeltaPhiMomentumBackAlt[4];        //Defines an array to reduce code from 16 loops to four
+    for(int j=0; j<4; j++){
+        hDeltaPhiMomentumBackAlt[j]= new TH2F(Form("hDeltaPhiMomentumBackAlt%i",j),Form("hDeltaPhiMomentumBackAlt%i",j),100,-1,2*TMath::Pi()-1,50,0,5);
+        ;
+    }
+    histname = "hDeltaPhiMomentumBackIso";
+    TH2F * hDeltaPhiMomentumBackIso[4];
+    for(int j=0; j<4; j++){
+        hDeltaPhiMomentumBackIso[j]= new TH2F(Form("hDeltaPhiMomentumBackIso%i",j),Form("hDeltaPhiMomentumBackIso%i",j),100,-1,2*TMath::Pi()-1,50,0,5);
+    }
+    histname = "hColorEtaPhi";
+    TH3F * hColorEtaPhi = new TH3F("hColorEtaPhi","hColorEtaPhi",100, -1, 2*TMath::Pi()-1, 100, -1,1, 50, 0,5);
+    
+    Int_t entries = tree->GetEntries();
+    cout<<entries<<endl;
+    
+    for (Int_t iev = 0;iev<entries;iev++){   //This is where you run over events
+        //Looping over number of events
+        if (iev % 100 == 0)
+            cout<<iev<<endl;
+        
+        //Get all the particles in the event
+        tree->GetEntry(iev);
+        bHardPartons->GetEntry(iev);
+        bHardPartonNames->GetEntry(iev);
+        bparticles->GetEntry(iev);
+        bBackground->GetEntry(iev);
+        
+        //loop over final state particles
+        Int_t nparticles = particles->GetEntries();
+        Int_t nBackground = Background->GetEntries();
+        for (int ip = 0; ip<nparticles;ip++){
+            //Find each particle
+            TLorentzVector* particle = (TLorentzVector*)particles->At(ip);
+            //Manipulate particles and fill histograms
+            hParticlepT->Fill(particle->Pt());
+            hParticlePhi->Fill(particle->Phi());
+            hParticleEta->Fill(particle->Eta());
+            hParticlepTBack->Fill(particle->Pt());
+            hParticleEtaPhi->Fill(particle->Eta(),particle->Phi());
+            hColorEtaPhi->Fill(particle->Phi(), particle->Eta(), particle->Pt());
+        }
+        for (int ip = 0; ip<nBackground;ip++){
+            TLorentzVector* backgrounds = (TLorentzVector*)Background->At(ip);
+            hBackgroundpT->Fill(backgrounds->Pt());
+            hBackgroundPhi->Fill(backgrounds->Phi());
+            hBackgroundEta->Fill(backgrounds->Eta());
+            hBackgroundEtaPhi->Fill(backgrounds->Phi(), backgrounds->Eta(), backgrounds->Pt());
+            hParticlepTBack->Fill(backgrounds->Pt());
+            //hParticleEtaPhi(Back?)->Fill(background->Eta(),background->Phi());
+        }
+        
+        
+        
+        
+        //hParticlepT->Fill(Ptrig);                 //should make 2 histograms to plot ptrig alone and passo Rosi said
+        //hParticlepTBack->Fill(Ptrig);
+        float delta;//d elta for pythia alone and pythia+background
+        float eta;
+        
+        TLorentzVector* TriggerParticle;
+        TLorentzVector* AssociatedParticle;
+        
+        for (int ip=0; ip<nparticles; ip++){
+            TLorentzVector* particleA = (TLorentzVector*)particles->At(ip);
+            
+            if (particleA->Pt()<2.5 || particleA->Pt()>10.0)
+                continue;
+            
+            TriggerParticle = particleA;                //makes trigger cut
+            
+            for (int jp=0; jp<nparticles; jp++){
+                TLorentzVector* particleB = (TLorentzVector*)particles->At(jp);
+                
+                if (particleB->Pt() > 4.0||particleB->Pt() < .5)
+                    continue;
+                
+                AssociatedParticle = particleB;     //makes associated cut
+                if (AssociatedParticle->Pt() == TriggerParticle->Pt()) continue;    //REVISE; MIGHT NOT WORK NOW THAT I RUN SEPARATE LOOPS
+                if (AssociatedParticle->Pt() > TriggerParticle->Pt()) continue;
+                else
+                delta = dphi(TriggerParticle->Phi(), AssociatedParticle->Phi());
+                eta = deta(TriggerParticle->Eta(), AssociatedParticle->Eta());
+                
+                hParticleDEtaDPhi->Fill(delta,eta);
+                hBothDEtaDPhi->Fill(delta,eta);
+                
+                if (TriggerParticle->Pt()>2.5 && TriggerParticle->Pt()<3.0){           //set up cut in trigger momentum
+                    hDeltaPhiMomentumBack[0]->Fill(delta,AssociatedParticle->Pt());
+                    hDeltaPhiMomentumBackAlt[0]->Fill(delta,AssociatedParticle->Pt());
+                    hDeltaPhiMomentum[0]->Fill(delta,AssociatedParticle->Pt());
+                }
+                
+                if (TriggerParticle->Pt()>3.0 && TriggerParticle->Pt()<4.0){
+                    hDeltaPhiMomentumBack[1]->Fill(delta,AssociatedParticle->Pt());
+                    hDeltaPhiMomentumBackAlt[1]->Fill(delta,AssociatedParticle->Pt());
+                    hDeltaPhiMomentum[1]->Fill(delta,AssociatedParticle->Pt());
+                }
+                
+                if (TriggerParticle->Pt()>4.0 && TriggerParticle->Pt()<6.0){
+                    hDeltaPhiMomentumBack[2]->Fill(delta,AssociatedParticle->Pt());
+                    hDeltaPhiMomentumBackAlt[2]->Fill(delta,AssociatedParticle->Pt());
+                    hDeltaPhiMomentum[2]->Fill(delta,AssociatedParticle->Pt());
+                }
+                
+                if (TriggerParticle->Pt()>6.0 && TriggerParticle->Pt()<10.0){
+                    hDeltaPhiMomentumBack[3]->Fill(delta,AssociatedParticle->Pt());
+                    hDeltaPhiMomentumBackAlt[3]->Fill(delta,AssociatedParticle->Pt());
+                    hDeltaPhiMomentum[3]->Fill(delta,AssociatedParticle->Pt());
+                }
+                
+            }
+            
+            for (int jp=0; jp<nBackground; jp++){
+                TLorentzVector* BackgroundB = (TLorentzVector*)Background->At(jp);
+                
+                if (BackgroundB->Pt() > 4.0||BackgroundB->Pt() < .5)
+                    continue;
+                
+                AssociatedParticle = BackgroundB;
+                
+                if (AssociatedParticle->Pt() == TriggerParticle->Pt()) continue;
+                if (AssociatedParticle->Pt() > TriggerParticle->Pt()) continue;
+                else
+                    
+                delta = dphi(TriggerParticle->Phi(), AssociatedParticle->Phi());
+                eta = deta(TriggerParticle->Eta(), AssociatedParticle->Eta());
+                
+                hBackgroundDEtaDPhi->Fill(delta,eta);
+                hBothDEtaDPhi->Fill(delta,eta);
+                
+                if (TriggerParticle->Pt()>2.5 && TriggerParticle->Pt()<3.0){             //set up cut in trigger momentum
+                    hDeltaPhiMomentumBack[0]->Fill(delta,AssociatedParticle->Pt());
+                    hDeltaPhiMomentumBackAlt[0]->Fill(delta,AssociatedParticle->Pt());
+                    hDeltaPhiMomentumBackIso[0]->Fill(delta,AssociatedParticle->Pt());
+                }
+                if (TriggerParticle->Pt()>3.0 && TriggerParticle->Pt()<4.0){
+                    hDeltaPhiMomentumBack[1]->Fill(delta,AssociatedParticle->Pt());
+                    hDeltaPhiMomentumBackAlt[1]->Fill(delta,AssociatedParticle->Pt());
+                    hDeltaPhiMomentumBackIso[1]->Fill(delta,AssociatedParticle->Pt());
+                }
+                if (TriggerParticle->Pt()>4.0 && TriggerParticle->Pt()<6.0){
+                    hDeltaPhiMomentumBack[2]->Fill(delta,AssociatedParticle->Pt());
+                    hDeltaPhiMomentumBackAlt[2]->Fill(delta,AssociatedParticle->Pt());
+                    hDeltaPhiMomentumBackIso[2]->Fill(delta,AssociatedParticle->Pt());
+                }
+                if (TriggerParticle->Pt()>6.0 && TriggerParticle->Pt()<10.0){
+                    hDeltaPhiMomentumBack[3]->Fill(delta,AssociatedParticle->Pt());
+                    hDeltaPhiMomentumBackAlt[3]->Fill(delta,AssociatedParticle->Pt());
+                    hDeltaPhiMomentumBackIso[3]->Fill(delta,AssociatedParticle->Pt());
+                }
+                
+                
+                
+                
+            }
+            
+            
+        }
+        
+        
+    }
+    //end of event loop
+    
+    float particleSum = 0;
+    float backgroundSum = 0;
+    float bothSum = 0;
+  
+    //normalization
+    for(int i = 1; i< (hParticleDEtaDPhi->GetYaxis()->GetNbins())-2; i++){
+        for(int j = 1; j< (hParticleDEtaDPhi->GetXaxis()->GetNbins())-2; j++){
+            particleSum += hParticleDEtaDPhi->GetBinContent(i,j);
+        }
+    }
+    for(int k = 1; k<(hBackgroundDEtaDPhi->GetYaxis()->GetNbins())-2; k++){
+        for(int b = 1; b<(hBackgroundDEtaDPhi->GetXaxis()->GetNbins())-2; b++){
+            backgroundSum += hBackgroundDEtaDPhi->GetBinContent(k,b);
+        }
+    }
+    for(int l = 1; l<(hBothDEtaDPhi->GetYaxis()->GetNbins())-2; l++){
+        for(int v = 1; v<(hBothDEtaDPhi->GetXaxis()->GetNbins())-2; v++){
+            bothSum += hBothDEtaDPhi->GetBinContent(l,v);
+        }
+    }
+
+    //use GetBinWidth instead of count
+    float particleBinSize = (hParticleDEtaDPhi->GetYaxis()->GetBinWidth(10))*(hParticleDEtaDPhi->GetXaxis()->GetBinWidth(10));
+    float backgroundNum = (hBackgroundDEtaDPhi->GetYaxis()->GetBinWidth(10))*(hBackgroundDEtaDPhi->GetXaxis()->GetBinWidth(10));
+    float bothNum = (hBothDEtaDPhi->GetYaxis()->GetBinWidth(10))*(hBothDEtaDPhi->GetXaxis()->GetBinWidth(10));
+   
+    hParticleDEtaDPhi->Scale(1/(particleBinSize*(100000)));
+    hBackgroundDEtaDPhi->Scale(1/(backgroundNum*(100000)));
+    hBothDEtaDPhi->Scale(1/(bothNum*(100000)));
+    
+   //Open output file and save the histograms
+    TFile *file1 = TFile::Open(OutFileName.Data(),"RECREATE");
+    
+    hHardPartonspT->Write();
+    hHardPartonsName->Write();
+    hParticlepT->Write();
+    hParticlePhi->Write();
+    hParticleEta->Write();
+    hParticlepTBack->Write();
+    hParticleEtaPhi->Write();
+    hBackgroundpT->Write();
+    hBackgroundPhi->Write();
+    hBackgroundEta->Write();
+    hBackgroundEtaPhi->Write();
+    hParticleDEtaDPhi->Write();
+    hBackgroundDEtaDPhi->Write();
+    hBothDEtaDPhi->Write();
+    hColorEtaPhi->Write();
+    
+    //My addition
+    hDeltaPhiMomentum[0]->Write();
+    hDeltaPhiMomentum[1]->Write();
+    hDeltaPhiMomentum[2]->Write();
+    hDeltaPhiMomentum[3]->Write();
+    
+    hDeltaPhiMomentumBack[0]->Write();
+    hDeltaPhiMomentumBack[1]->Write();
+    hDeltaPhiMomentumBack[2]->Write();
+    hDeltaPhiMomentumBack[3]->Write();
+    
+    hDeltaPhiMomentumBackAlt[0]->Write();
+    hDeltaPhiMomentumBackAlt[1]->Write();
+    hDeltaPhiMomentumBackAlt[2]->Write();
+    hDeltaPhiMomentumBackAlt[3]->Write();
+    
+    hDeltaPhiMomentumBackIso[0]->Write();
+    hDeltaPhiMomentumBackIso[1]->Write();
+    hDeltaPhiMomentumBackIso[2]->Write();
+    hDeltaPhiMomentumBackIso[3]->Write();
+}
+
+
