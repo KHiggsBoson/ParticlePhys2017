@@ -1,0 +1,888 @@
+//
+//  DrawGaus.cpp
+//
+//
+//  Created by Kyle Higgins on 6/16/17.
+//
+//
+
+
+void DrawGaus(TString infile = "histos.root"){
+    set_plot_style();
+    gStyle->SetOptStat(0);
+    gStyle->SetOptTitle(0);
+    
+    
+    TFile *_file0 = TFile::Open(infile);
+    
+    TH1* hParticlepT = (TH1*)gROOT->FindObject("hParticlepT");
+    SetHist(hParticlepT,"p_{T,track} (GeV/c)","#frac{d^{2}N}{2#pidp_{T}d#eta}",1);
+    hParticlepT->GetYaxis()->SetTitleOffset(1.8);
+    TH1* hParticlePhi = (TH1*)gROOT->FindObject("hParticlePhi");
+    SetHist(hParticlePhi,"#phi","#frac{dN}{d#phi}");
+    TH1* hParticleEta = (TH1*)gROOT->FindObject("hParticleEta");
+    SetHist(hParticleEta,"#eta","#frac{dN}{d#eta}");
+    TH1* hParticlepTBack = (TH1*)gROOT->FindObject("hParticlepTBack");
+    TH1* hBackgroundpT = (TH1*)gROOT->FindObject("hBackgroundpT");
+    SetHist(hBackgroundpT,"p_{T,track} (GeV/c)","#frac{d^{2}N}{2#pidp_{T}d#eta}",1);
+    hBackgroundpT->GetYaxis()->SetTitleOffset(1.8);
+    TH1* hBackgroundPhi = (TH1*)gROOT->FindObject("hBackgroundPhi");
+    SetHist(hBackgroundPhi,"#phi","#frac{dN}{d#phi}");
+    TH1* hBackgroundEta = (TH1*)gROOT->FindObject("hBackgroundEta");
+    SetHist(hBackgroundEta,"#eta","#frac{dN}{d#eta}");
+
+    
+    TH3F* hColorEtaPhi = (TH3F*)gROOT->FindObject("hColorEtaPhi");
+    TH2F* hParticleEtaPhi = (TH2F*)gROOT->FindObject("hParticleEtaPhi");
+    SetHist(hParticleEtaPhi,"#phi","#eta","counts",1);
+    TH2F* hBackgroundEtaPhi = (TH2F*)gROOT->FindObject("hBackgroundEtaPhi");
+    SetHist(hBackgroundEtaPhi,"#phi","#eta","counts",1);
+    TH2F* hParticleDEtaDPhi = (TH2F*)gROOT->FindObject("hParticleDEtaDPhi");
+    SetHist(hParticleDEtaDPhi, "d #phi", " d #eta","counts",1);
+    TH2F* hBackgroundDEtaDPhi = (TH2F*)gROOT->FindObject("hBackgroundDEtaDPhi");
+    SetHist(hBackgroundDEtaDPhi, "d #phi", "d #eta","counts",1);
+    TH2F* hBothDEtaDPhi = (TH2F*)gROOT->FindObject("hBothDEtaDPhi");
+    SetHist(hBothDEtaDPhi, "d #phi", "d #eta","counts",1);
+    TH2* hDeltaPhiMomentum[4];
+    TH2* hDeltaPhiMomentumBack[4];
+    TH2* hDeltaPhiMomentumBackAlt[4];
+    TH2* hDeltaPhiMomentumBackIso[4];
+    char associated[50];
+    for (int j=0; j<4; j++){
+        hDeltaPhiMomentum[j] = (TH2*)gROOT->FindObject(Form("hDeltaPhiMomentum%i",j));
+        hDeltaPhiMomentumBack[j] = (TH2*)gROOT->FindObject(Form("hDeltaPhiMomentumBack%i", j));
+        hDeltaPhiMomentumBackAlt[j] = (TH2*)gROOT->FindObject(Form("hDeltaPhiMomentumBackAlt%i", j));
+        hDeltaPhiMomentumBackIso[j] = (TH2*)gROOT->FindObject(Form("hDeltaPhiMomentumBackIso%i", j));
+    }
+    //Define arrays for later
+    
+    TH1F* hDummy = new TH1F("dummy", "dummy title", 100, 2, 9);
+    hDummy->GetYaxis()->SetRangeUser(.1 ,3);
+    TH1F* hDummy2 = new TH1F("dummy2", "dummy2 title", 100, -1, 2*TMath::Pi()-1);
+    hDummy2->GetYaxis()->SetRangeUser(-.05, 1);
+    TH1F* hDummy3 = new TH1F("dummy3", "", 100, -1, 2*TMath::Pi()-1);
+    SetHist(hDummy3, "#Delta #Phi", "Ratio",1);
+    hDummy3->GetYaxis()->SetRangeUser(-5,5);
+    hDummy3->SetLineWidth(1);
+    
+    TH1* HistProjection[16];                  //array for 16 histograms
+    TH1* ZYA1[16];                      //for subtracting background
+    TH1F* ZYAMRatio[16];
+    TH1F* ZYAMRatioAlt[16];
+    TH1F* ZYA1Ratio[16];
+    TH1F* ZYA1RatioAlt[16];
+    
+    for(int j=0; j<16; j++){
+        ZYAMRatio[j] = new TH1F(Form("ZYAMRatio%i",j),Form("ZYAMRatio%i",j),100,-4,4);
+        ZYA1Ratio[j] = new TH1F(Form("ZYA1Ratio%i",j),Form("ZYA1Ratio%i",j),100,-4,4);
+        ZYAMRatioAlt[j] = new TH1F(Form("ZYAMRatioAlt%i",j),Form("ZYAMRatioAlt%i",j),100,-4,4);
+        ZYA1RatioAlt[j] = new TH1F(Form("ZYA1RatioAlt%i",j),Form("ZYA1RatioAlt%i",j),100,-4,4);
+    }
+    
+    char legend[50];                 //used in making legend for display, 50 is ambiguous, if you dont give info for all of them, then only the ones with enough info show up
+    double bin0[5];                 //use for splitting bins, which we actually need to cut the P associated. We can't do it any other way, we must use the bins
+    double bin1[5];
+    double bin2[5];
+    double bin3[5];
+    double bin[5]={0.5, 1.0, 1.5, 2.5, 4.0};
+    Double_t sigmaa[16];
+    Double_t sigmabacka[16];
+    Double_t sigmab[16];
+    Double_t sigmabackb[16];
+    Double_t sigmabackalta[16];
+    Double_t sigmabackaltb[16];
+    Double_t sigsuma1[4];
+    Double_t sigsuma2[4];
+    Double_t sigsuma3[4];
+    Double_t sigsuma4[4];
+    Double_t sigsumb1[4];
+    Double_t sigsumb2[4];
+    Double_t sigsumb3[4];
+    Double_t sigsumb4[4];
+    Double_t sigsumbacka1[4];
+    Double_t sigsumbacka2[4];
+    Double_t sigsumbacka3[4];
+    Double_t sigsumbacka4[4];
+    Double_t sigsumbackb1[4];
+    Double_t sigsumbackb2[4];
+    Double_t sigsumbackb3[4];
+    Double_t sigsumbackb4[4];
+    Double_t sigsumbackalta1[4];
+    Double_t sigsumbackalta2[4];
+    Double_t sigsumbackalta3[4];
+    Double_t sigsumbackalta4[4];
+    Double_t sigsumbackaltb1[4];
+    Double_t sigsumbackaltb2[4];
+    Double_t sigsumbackaltb3[4];
+    Double_t sigsumbackaltb4[4];
+    Double_t sigerrora[16];
+    Double_t sigerrorb[16];
+    Double_t sigerrorbacka[16];
+    Double_t sigerrorbackb[16];
+    Double_t sigerrorbackalta[16];
+    Double_t sigerrorbackaltb[16];
+    Double_t sigsumerrora1[4];
+    Double_t sigsumerrora2[4];
+    Double_t sigsumerrora3[4];
+    Double_t sigsumerrora4[4];
+    Double_t sigsumerrorb1[4];
+    Double_t sigsumerrorb2[4];
+    Double_t sigsumerrorb3[4];
+    Double_t sigsumerrorb4[4];
+    Double_t sigsumerrorbacka1[4];
+    Double_t sigsumerrorbacka2[4];
+    Double_t sigsumerrorbacka3[4];
+    Double_t sigsumerrorbacka4[4];
+    Double_t sigsumerrorbackb1[4];
+    Double_t sigsumerrorbackb2[4];
+    Double_t sigsumerrorbackb3[4];
+    Double_t sigsumerrorbackb4[4];
+    Double_t sigsumerrorbackalta1[4];
+    Double_t sigsumerrorbackalta2[4];
+    Double_t sigsumerrorbackalta3[4];
+    Double_t sigsumerrorbackalta4[4];
+    Double_t sigsumerrorbackaltb1[4];
+    Double_t sigsumerrorbackaltb2[4];
+    Double_t sigsumerrorbackaltb3[4];
+    Double_t sigsumerrorbackaltb4[4];
+    
+    
+    //Redo with background
+    TH1* HistProjectionBack[16];
+    double binback0[5];
+    double binback1[5];
+    double binback2[5];
+    double binback3[5];
+    double binback[5]={0.5, 1.0, 1.5, 2.5, 4.0};
+    
+    TH1* HistProjectionBackAlt[16];
+    
+    TH1* HistProjectionBackIso[16];
+    double binbackiso0[5];
+    double binbackiso1[5];
+    double binbackiso2[5];
+    double binbackiso3[5];
+    double binbackiso[5]={0.5, 1.0, 1.5, 2.5, 4.0};
+    
+    double NormTrig[16];
+    double NormTrigBack[16];
+    double NormTrigZYA1[16];
+    double NormTrigZYAM[16];
+    
+    double binphi[16];
+    double binmin[16];
+    
+    //Find bin numbers for cuts of P associative
+    for (int j=0; j<5; j++){
+        
+        bin0[j]= hDeltaPhiMomentum[0]->GetYaxis()->FindBin(bin[j]);   //figures out which bins make the cut for momentum ranges which were defined in other file
+        bin1[j]= hDeltaPhiMomentum[1]->GetYaxis()->FindBin(bin[j]);
+        bin2[j]= hDeltaPhiMomentum[2]->GetYaxis()->FindBin(bin[j]);
+        bin3[j]= hDeltaPhiMomentum[3]->GetYaxis()->FindBin(bin[j]);
+        
+        binback0[j]= hDeltaPhiMomentumBack[0]->GetYaxis()->FindBin(binback[j]);
+        binback1[j]= hDeltaPhiMomentumBack[1]->GetYaxis()->FindBin(binback[j]);
+        binback2[j]= hDeltaPhiMomentumBack[2]->GetYaxis()->FindBin(binback[j]);
+        binback3[j]= hDeltaPhiMomentumBack[3]->GetYaxis()->FindBin(binback[j]);
+        
+        binbackiso0[j]= hDeltaPhiMomentumBackIso[0]->GetYaxis()->FindBin(binbackiso[j]);
+        binbackiso1[j]= hDeltaPhiMomentumBackIso[1]->GetYaxis()->FindBin(binbackiso[j]);
+        binbackiso2[j]= hDeltaPhiMomentumBackIso[2]->GetYaxis()->FindBin(binbackiso[j]);
+        binbackiso3[j]= hDeltaPhiMomentumBackIso[3]->GetYaxis()->FindBin(binbackiso[j]);
+    }
+    
+    //Project y axis for P associative
+    for (int j=0; j<4; j++){                                        //takes care of first row
+        //Forms info together
+        HistProjection[j] = hDeltaPhiMomentum[0]->ProjectionX(Form("HistProjection%i",j),bin0[j],bin0[j+1]);
+        HistProjection[j+4] = hDeltaPhiMomentum[1]->ProjectionX(Form("HistProjection%i",j+4),bin1[j],bin1[j+1]);
+        HistProjection[j+8] = hDeltaPhiMomentum[2]->ProjectionX(Form("HistProjection%i",j+8),bin2[j],bin2[j+1]);
+        HistProjection[j+12] = hDeltaPhiMomentum[3]->ProjectionX(Form("HistProjection%i",j+12),bin3[j],bin3[j+1]);
+        
+        HistProjectionBack[j] = hDeltaPhiMomentumBack[0]->ProjectionX(Form("HistProjectionBack%i",j),binback0[j],binback0[j+1]);
+        HistProjectionBack[j+4] = hDeltaPhiMomentumBack[1]->ProjectionX(Form("HistProjectionBack%i",j+4),binback1[j],binback1[j+1]);
+        HistProjectionBack[j+8] = hDeltaPhiMomentumBack[2]->ProjectionX(Form("HistProjectionBack%i",j+8),binback2[j],binback2[j+1]);
+        HistProjectionBack[j+12] = hDeltaPhiMomentumBack[3]->ProjectionX(Form("HistProjectionBack%i",j+12),binback3[j],binback3[j+1]);
+        
+        HistProjectionBackAlt[j] = hDeltaPhiMomentumBackAlt[0]->ProjectionX(Form("HistProjectionBackAlt%i",j),binback0[j],binback0[j+1]);
+        HistProjectionBackAlt[j+4] = hDeltaPhiMomentumBackAlt[1]->ProjectionX(Form("HistProjectionBackAlt%i",j+4),binback1[j],binback1[j+1]);
+        HistProjectionBackAlt[j+8] = hDeltaPhiMomentumBackAlt[2]->ProjectionX(Form("HistProjectionBackAlt%i",j+8),binback2[j],binback2[j+1]);
+        HistProjectionBackAlt[j+12] = hDeltaPhiMomentumBackAlt[3]->ProjectionX(Form("HistProjectionBackAlt%i",j+12),binback3[j],binback3[j+1]);
+        
+        
+        HistProjectionBackIso[j] = hDeltaPhiMomentumBackIso[0]->ProjectionX(Form("HistProjectionBackIso%i",j),binbackiso0[j],binbackiso0[j+1]);
+        HistProjectionBackIso[j+4] = hDeltaPhiMomentumBackIso[1]->ProjectionX(Form("HistProjectionBackIso%i",j+4),binbackiso1[j],binbackiso1[j+1]);
+        HistProjectionBackIso[j+8] = hDeltaPhiMomentumBackIso[2]->ProjectionX(Form("HistProjectionBackIso%i",j+8),binbackiso2[j],binbackiso2[j+1]);
+        HistProjectionBackIso[j+12] = hDeltaPhiMomentumBackIso[3]->ProjectionX(Form("HistProjectionBackIso%i",j+12),binbackiso3[j],binbackiso3[j+1]);
+    }
+    
+    
+    /*TCanvas* can5 = new TCanvas("can5","",1000,500);
+     can5->Divide(4,4,0);*/
+    
+    //cout<<"BinWidth"<<BinWidth<<endl;
+    //cout<<"NormTrig0"<<NormTrig0<<endl;
+    
+    double NormTrigBack0 = hParticlepTBack->Integral(hParticlepTBack->FindBin(2.5),hParticlepTBack->FindBin(3.0));  //find number of trigger events in given momentum ranges for hParticlepT
+    double NormTrigBack1 = hParticlepTBack->Integral(hParticlepTBack->FindBin(3.0),hParticlepTBack->FindBin(4.0));
+    double NormTrigBack2 = hParticlepTBack->Integral(hParticlepTBack->FindBin(4.0),hParticlepTBack->FindBin(6.0));
+    double NormTrigBack3 = hParticlepTBack->Integral(hParticlepTBack->FindBin(6.0),hParticlepTBack->FindBin(10.0));
+    Double_t norm = 1;
+    double BinWidthBack = HistProjectionBack[0]->GetBinWidth(1);
+    
+    double NormTrig0 = hParticlepT->Integral(hParticlepT->FindBin(2.5),hParticlepT->FindBin(3.0));  //find number of trigger events in given momentum ranges for hParticlepT
+    double NormTrig1 = hParticlepT->Integral(hParticlepT->FindBin(3.0),hParticlepT->FindBin(4.0));
+    double NormTrig2 = hParticlepT->Integral(hParticlepT->FindBin(4.0),hParticlepT->FindBin(6.0));
+    double NormTrig3 = hParticlepT->Integral(hParticlepT->FindBin(6.0),hParticlepT->FindBin(10.0));
+    double BinWidth = HistProjection[0]->GetBinWidth(1);
+    
+    TCanvas* canA = new TCanvas("canA","",1000,500);
+    canA->Divide(4,4,0);
+    
+    TCanvas* canRatio = new TCanvas("canRatio","",1000,500);
+    canRatio->Divide(4,4,0);
+    
+    TCanvas* canRatioAlt = new TCanvas("canRatioAlt","",1000,500);
+    canRatioAlt->Divide(4,4,0);
+    
+    
+    TLegend* legendproj0 = new TLegend(0.3,.7,0.6,0.9);
+    legendproj0->AddEntry(HistProjection0, "0.5<Passo<1.0 GeV/c", "");
+    legendproj0->AddEntry(HistProjection0, "2.5<Ptrig<3.0 GeV/c", "");
+    TLegend* legendproj1 = new TLegend(0.3,.8,0.6,0.9);
+    legendproj1->AddEntry(HistProjection1, "3.0<Ptrig<4.0 GeV/c", "");
+    TLegend* legendproj2 = new TLegend(0.3,.8,0.6,0.9);
+    legendproj2->AddEntry(HistProjection2, "4.0<Ptrig<6.0 GeV/c", "");
+    TLegend* legendproj3 = new TLegend(0.3,.8,0.6,0.9);
+    legendproj3->AddEntry(HistProjection3, "6.0<Ptrig<10.0 GeV/c", "");
+    TLegend* legendproj4 = new TLegend(0.3,.8,0.6,0.9);
+    legendproj4->AddEntry(HistProjection4, "1.0.0<Passo<1.5 GeV/c", "");
+    TLegend* legendproj8 = new TLegend(0.3,.8,0.6,0.9);
+    legendproj8->AddEntry(HistProjection8, "1.5<Passo<2.5 GeV/c", "");
+    TLegend* legendproj12 = new TLegend(0.3,.8,0.6,0.9);
+    legendproj12->AddEntry(HistProjection12, "2.5<Passo<4.0 GeV/c", "");
+    
+    
+    for (int j=0; j<16; j++) {
+        
+        binphi[j] = HistProjectionBack[j]->GetBinContent(HistProjectionBack[j]->FindBin(1,0,0));
+        
+        for (int k=1; k<HistProjectionBack[j]->GetNbinsX(); k++){
+            HistProjectionBack[j]->SetBinContent(k, HistProjectionBack[j]->GetBinContent(k)-(binphi[j]));
+        }
+        
+        binmin[j] = HistProjectionBackAlt[j]->GetBinContent(HistProjectionBackAlt[j]->GetMinimumBin());
+        
+        for (int f=0; f<HistProjectionBackAlt[j]->GetNbinsX(); f++){
+            HistProjectionBackAlt[j]->SetBinContent(f, HistProjectionBackAlt[j]->GetBinContent(f)-(binmin[j]));
+        }
+        
+        
+        NormTrig[j] = HistProjection[j]->Integral(HistProjection[j]->FindBin(-1), HistProjection[j]->FindBin(2*TMath::Pi()-1));
+        NormTrigBack[j] = HistProjectionBackIso[j]->Integral(HistProjectionBackIso[j]->FindBin(-1), HistProjectionBackIso[j]->FindBin(2*TMath::Pi()-1));
+        NormTrigZYA1[j] = HistProjectionBack[j]->Integral(HistProjectionBack[j]->FindBin(-1), HistProjectionBack[j]->FindBin(2*TMath::Pi()-1));
+        NormTrigZYAM[j] = HistProjectionBackAlt[j]->Integral(HistProjectionBackAlt[j]->FindBin(-1), HistProjectionBackAlt[j]->FindBin(2*TMath::Pi()-1));
+        
+        HistProjection[j]->Scale(norm/(BinWidthBack*NormTrig[j]));
+        HistProjectionBackIso[j]->Scale(norm/(BinWidthBack*NormTrigBack[j]));
+        HistProjectionBack[j]->Scale(norm/(BinWidthBack*NormTrigZYA1[j]));
+        HistProjectionBackAlt[j]->Scale(norm/(BinWidthBack*NormTrigZYAM[j]));
+        
+        
+        canA->cd(j+1);
+        gPad->SetLeftMargin(0.15);
+        
+        SetHist(hDummy2, "#Delta #Phi", "Counts (Normalized)" ,1);
+        hDummy2->Draw();
+        SetHist(HistProjectionBackIso[j], "#Delta #Phi", "Counts (Normalized)" ,13);
+        HistProjectionBackIso[j]->SetMarkerStyle(7);
+        //HistProjectionBackIso[j]->Draw("plsame");
+        SetHist(HistProjection[j], "#Delta #Phi", "Counts (Normalized)" ,1);
+        HistProjection[j]->SetMarkerStyle(7);
+        HistProjection[j]->Draw("same");
+        SetHist(HistProjectionBack[j], "#Delta #Phi", "Counts (Normalized)" ,2);
+        HistProjectionBack[j]->SetMarkerStyle(7);
+        HistProjectionBack[j]->Draw("same");
+        SetHist(HistProjectionBackAlt[j], "#Delta #Phi", "Counts (Normalized)" ,4);
+        HistProjectionBackAlt[j]->SetMarkerStyle(7);
+        HistProjectionBackAlt[j]->Draw("same");
+        
+        if (j==0){
+            legendproj0->Draw("same");}
+        if (j==1){
+            legendproj1->Draw("same");}
+        if (j==2){
+            legendproj2->Draw("same");}
+        if (j==3){
+            legendproj3->Draw("same");}
+        if (j==4){
+            legendproj4->Draw("same");}
+        if (j==8){
+            legendproj8->Draw("same");}
+        if (j==12){
+            legendproj12->Draw("same");}
+        
+   
+
+        //ratio plots
+        //ZYAM
+        canRatio->cd(j+1);
+        //histname = "ZYAMRatio";
+        ZYAMRatio[j] = (TH1F*)HistProjectionBackAlt[j]->Clone();
+        ZYAMRatio[j]->Divide(HistProjection[j]);
+        SetHist(ZYAMRatio[j], "#Delta #Phi", "Ratio",4);
+        hDummy3->Draw("same");
+        ZYAMRatio[j] ->Draw("same");
+        
+        //ZYA1
+        ZYA1Ratio[j] = (TH1F*)HistProjectionBack[j]->Clone();
+        ZYA1Ratio[j]->Divide(HistProjection[j]);
+        SetHist(ZYA1Ratio[j], "#Delta #Phi", "Ratio",2);
+        //hDummy3->Draw();
+        ZYA1Ratio[j]->Draw("same");
+        
+        
+        if (j==0){
+            legendproj0->Draw("same");}
+        if (j==1){
+            legendproj1->Draw("same");}
+        if (j==2){
+            legendproj2->Draw("same");}
+        if (j==3){
+            legendproj3->Draw("same");}
+        if (j==4){
+            legendproj4->Draw("same");}
+        if (j==8){
+            legendproj8->Draw("same");}
+        if (j==12){
+            legendproj12->Draw("same");}
+
+        canRatioAlt->cd(j+1);
+        ZYAMRatioAlt[j] = (TH1F*)HistProjectionBackAlt[j]->Clone();
+        ZYAMRatioAlt[j]->Add(HistProjection[j],-1);
+        ZYAMRatioAlt[j]->Divide(HistProjection[j]);
+        SetHist(ZYAMRatioAlt[j], "#Delta #Phi", "Ratio",4);
+        hDummy3->Draw();
+        ZYAMRatioAlt[j]->Draw("same");
+        
+        ZYA1RatioAlt[j] = (TH1F*)HistProjectionBack[j]->Clone();
+        ZYA1RatioAlt[j]->Add(HistProjection[j],-1);
+        ZYA1RatioAlt[j]->Divide(HistProjection[j]);
+        SetHist(ZYA1RatioAlt[j], "#Delta #Phi", "Ratio",2);
+        ZYA1RatioAlt[j]->Draw("same");
+       
+    
+        
+    }
+    
+    
+    TCanvas* can4 = new TCanvas("can4","",1000,500);     //my addition
+    can4->Divide(4,4,0);      //divides into 4x4
+    
+    for (int j=0; j<16; j++) {
+        
+        
+      /*  can4->cd(j+1);
+        gPad->SetLeftMargin(0.15);
+        SetHist(hDummy2, "#Delta #Phi", "Counts (Normalized)" ,1);
+        SetHist(HistProjection[j], "#Delta #Phi", "Counts (Normalized)" ,1);
+        hDummy2->Draw();
+        HistProjectionBackIso[j]->Draw();
+        if (j==0){
+            legendproj0->Draw("same");}
+        if (j==1){
+            legendproj1->Draw("same");}
+        if (j==2){
+            legendproj2->Draw("same");}
+        if (j==3){
+            legendproj3->Draw("same");}
+        if (j==4){
+            legendproj4->Draw("same");}
+        if (j==8){
+            legendproj8->Draw("same");}
+        if (j==12){
+            legendproj12->Draw("same");}
+        
+        */
+        
+        TF1* doublegausa = new TF1(Form("doublegausa%i",j), "gaus(0)+gaus(3)",-1,1.2);
+        TF1* doublegausb = new TF1(Form("doublegausb%i",j), "gaus(0)+gaus(3)",1.5,4.9);
+        TF1* doublegausbacka = new TF1(Form("doublegausbacka%i",j), "gaus(0)+gaus(3)",-1,1.2);
+        TF1* doublegausbackb = new TF1(Form("doublegausbackb%i",j), "gaus(0)+gaus(3)",1.5,4.9);
+        TF1* doublegausbackalta = new TF1(Form("doublegausbackalta%i",j), "gaus(0)+gaus(3)",-1,1.2);
+        TF1* doublegausbackaltb = new TF1(Form("doublegausbackaltb%i",j), "gaus(0)+gaus(3)",1.5,4.9);
+        
+        
+        doublegausa->SetParameter(0,0.4);
+        doublegausa->SetParameter(1,0);
+        doublegausa->SetParameter(2,.25);
+        doublegausa->SetParameter(3,.2);
+        doublegausa->SetParameter(4,0);
+        doublegausa->SetParameter(5,.8);
+        
+        doublegausb->SetParameter(0,0.3);
+        doublegausb->SetParameter(1,3);
+        doublegausb->SetParameter(2,.25);
+        doublegausb->SetParameter(3,.15);
+        doublegausb->SetParameter(4,3);
+        doublegausb->SetParameter(5,.8);
+        
+        doublegausbacka->SetParameter(0,0.35);
+        doublegausbacka->SetParameter(1,0);
+        doublegausbacka->SetParameter(2,1);
+        doublegausbacka->SetParameter(3,.175);
+        doublegausbacka->SetParameter(4,0);
+        doublegausbacka->SetParameter(5,2);
+        
+        if (j==12){
+            doublegausbackb->SetParameter(0,0.4);
+            doublegausbackb->SetParameter(1,3);
+            doublegausbackb->SetParameter(2,.2);
+            doublegausbackb->SetParameter(3,.3);
+            doublegausbackb->SetParameter(4,3);
+            doublegausbackb->SetParameter(5,.4);
+        }
+        
+        doublegausbackb->SetParameter(0,0.2);
+        doublegausbackb->SetParameter(1,3);
+        doublegausbackb->SetParameter(2,1);
+        doublegausbackb->SetParameter(3,.1);
+        doublegausbackb->SetParameter(4,3);
+        doublegausbackb->SetParameter(5,1.5);
+        
+        doublegausbackalta->SetParameter(0,0.35);
+        doublegausbackalta->SetParameter(1,0);
+        doublegausbackalta->SetParameter(2,.25);
+        doublegausbackalta->SetParameter(3,.175);
+        doublegausbackalta->SetParameter(4,0);
+        doublegausbackalta->SetParameter(5,.8);
+        
+        doublegausbackaltb->SetParameter(0,0.35);
+        doublegausbackaltb->SetParameter(1,3);
+        doublegausbackaltb->SetParameter(2,.25);
+        doublegausbackaltb->SetParameter(3,.175);
+        doublegausbackaltb->SetParameter(4,3);
+        doublegausbackaltb->SetParameter(5,.8);
+        
+         HistProjection[j]->Fit(Form("doublegausa%i",j));
+         HistProjection[j]->Fit(Form("doublegausb%i",j));
+         HistProjectionBack[j]->Fit(Form("doublegausbacka%i",j));
+         HistProjectionBack[j]->Fit(Form("doublegausbackb%i",j));
+         HistProjectionBackAlt[j]->Fit(Form("doublegausbackalta%i",j));
+         HistProjectionBackAlt[j]->Fit(Form("doublegausbackaltb%i",j));
+        
+        sigmaa[j] = fabs(doublegausa->GetParameter(2));
+        sigerrora[j] = fabs(doublegausa->GetParError(2));
+        
+        sigmab[j] = fabs(doublegausb->GetParameter(2));
+        sigerrorb[j] = fabs(doublegausb->GetParError(2));
+        
+        sigmabacka[j] = fabs(doublegausbacka->GetParameter(2));
+        sigerrorbacka[j] = fabs(doublegausbacka->GetParError(2));
+        
+        sigmabackb[j] = fabs(doublegausbackb->GetParameter(2));
+        sigerrorbackb[j] = fabs(doublegausbackb->GetParError(2));
+        
+        sigmabackalta[j] = fabs(doublegausbackalta->GetParameter(2));
+        sigerrorbackalta[j] = fabs(doublegausbackalta->GetParError(2));
+        
+        sigmabackaltb[j] = fabs(doublegausbackaltb->GetParameter(2));
+        sigerrorbackaltb[j] = fabs(doublegausbackaltb->GetParError(2));
+        
+        
+        
+        //doublegausa->Draw("same");  //Didn't do anything, was effort to get both to show on plot; only second will
+        //doublegausb->Draw("same");
+        
+    }
+    for (int j=0; j<4; j++){
+        sigsuma1[j] = sigmaa[j];
+        sigsuma2[j] = sigmaa[j+4];
+        sigsuma3[j] = sigmaa[j+8];
+        sigsuma4[j] = sigmaa[j+12];
+        
+        sigsumb1[j] = sigmab[j];
+        sigsumb2[j] = sigmab[j+4];
+        sigsumb3[j] = sigmab[j+8];
+        sigsumb4[j] = sigmab[j+12];
+        
+        sigsumerrora1[j] = sigerrora[j];
+        sigsumerrora2[j] = sigerrora[j+4];
+        sigsumerrora3[j] = sigerrora[j+8];
+        sigsumerrora4[j] = sigerrora[j+12];
+        
+        sigsumerrorb1[j] = sigerrorb[j];
+        sigsumerrorb2[j] = sigerrorb[j+4];
+        sigsumerrorb3[j] = sigerrorb[j+8];
+        sigsumerrorb4[j] = sigerrorb[j+12];
+        
+        sigsumbacka1[j] = sigmabacka[j];
+        sigsumbacka2[j] = sigmabacka[j+4];
+        sigsumbacka3[j] = sigmabacka[j+8];
+        sigsumbacka4[j] = sigmabacka[j+12];
+        
+        sigsumbackb1[j] = sigmabackb[j];
+        sigsumbackb2[j] = sigmabackb[j+4];
+        sigsumbackb3[j] = sigmabackb[j+8];
+        sigsumbackb4[j] = sigmabackb[j+12];
+        
+        sigsumerrorbacka1[j] = sigerrorbacka[j];
+        sigsumerrorbacka2[j] = sigerrorbacka[j+4];
+        sigsumerrorbacka3[j] = sigerrorbacka[j+8];
+        sigsumerrorbacka4[j] = sigerrorbacka[j+12];
+        
+        sigsumerrorbackb1[j] = sigerrorbackb[j];
+        sigsumerrorbackb2[j] = sigerrorbackb[j+4];
+        sigsumerrorbackb3[j] = sigerrorbackb[j+8];
+        sigsumerrorbackb4[j] = sigerrorbackb[j+12];
+        
+        sigsumbackalta1[j] = sigmabackalta[j];
+        sigsumbackalta2[j] = sigmabackalta[j+4];
+        sigsumbackalta3[j] = sigmabackalta[j+8];
+        sigsumbackalta4[j] = sigmabackalta[j+12];
+        
+        sigsumbackaltb1[j] = sigmabackaltb[j];
+        sigsumbackaltb2[j] = sigmabackaltb[j+4];
+        sigsumbackaltb3[j] = sigmabackaltb[j+8];
+        sigsumbackaltb4[j] = sigmabackaltb[j+12];
+        
+        sigsumerrorbackalta1[j] = sigerrorbackalta[j];
+        sigsumerrorbackalta2[j] = sigerrorbackalta[j+4];
+        sigsumerrorbackalta3[j] = sigerrorbackalta[j+8];
+        sigsumerrorbackalta4[j] = sigerrorbackalta[j+12];
+        
+        sigsumerrorbackaltb1[j] = sigerrorbackaltb[j];
+        sigsumerrorbackaltb2[j] = sigerrorbackaltb[j+4];
+        sigsumerrorbackaltb3[j] = sigerrorbackaltb[j+8];
+        sigsumerrorbackaltb4[j] = sigerrorbackaltb[j+12];
+        
+        
+    }
+    
+    double x[4] = {2.7,3.5,5.0,8.0};                //Gets spread of momentum near trigger
+    gPad->SetLeftMargin(0.15);
+    
+    TGraphErrors* gausspreada1 = new TGraphErrors(4,x,sigsuma1,0,sigsumerrora1);
+    TGraphErrors* gausspreadb1 = new TGraphErrors(4,x,sigsumb1,0,sigsumerrorb1);
+    TGraphErrors* gausspreada2 = new TGraphErrors(4,x,sigsuma2,0,sigsumerrora2);
+    TGraphErrors* gausspreadb2 = new TGraphErrors(4,x,sigsumb2,0,sigsumerrorb2);
+    TGraphErrors* gausspreada3 = new TGraphErrors(4,x,sigsuma3,0,sigsumerrora3);
+    TGraphErrors* gausspreadb3 = new TGraphErrors(4,x,sigsumb3,0,sigsumerrorb3);
+    TGraphErrors* gausspreada4 = new TGraphErrors(4,x,sigsuma4,0,sigsumerrora4);
+    TGraphErrors* gausspreadb4 = new TGraphErrors(4,x,sigsumb4,0,sigsumerrorb4);
+    
+    TGraphErrors* gausspreadbacka1 = new TGraphErrors(4,x,sigsumbacka1,0,sigsumerrorbacka1);
+    TGraphErrors* gausspreadbackb1 = new TGraphErrors(4,x,sigsumbackb1,0,sigsumerrorbackb1);
+    TGraphErrors* gausspreadbacka2 = new TGraphErrors(4,x,sigsumbacka2,0,sigsumerrorbacka2);
+    TGraphErrors* gausspreadbackb2 = new TGraphErrors(4,x,sigsumbackb2,0,sigsumerrorbackb2);
+    TGraphErrors* gausspreadbacka3 = new TGraphErrors(4,x,sigsumbacka3,0,sigsumerrorbacka3);
+    TGraphErrors* gausspreadbackb3 = new TGraphErrors(4,x,sigsumbackb3,0,sigsumerrorbackb3);
+    TGraphErrors* gausspreadbacka4 = new TGraphErrors(4,x,sigsumbacka4,0,sigsumerrorbacka4);
+    TGraphErrors* gausspreadbackb4 = new TGraphErrors(4,x,sigsumbackb4,0,sigsumerrorbackb4);
+    
+    TGraphErrors* gausspreadbackalta1 = new TGraphErrors(4,x,sigsumbackalta1,0,sigsumerrorbackalta1);
+    TGraphErrors* gausspreadbackaltb1 = new TGraphErrors(4,x,sigsumbackaltb1,0,sigsumerrorbackaltb1);
+    TGraphErrors* gausspreadbackalta2 = new TGraphErrors(4,x,sigsumbackalta2,0,sigsumerrorbackalta2);
+    TGraphErrors* gausspreadbackaltb2 = new TGraphErrors(4,x,sigsumbackaltb2,0,sigsumerrorbackaltb2);
+    TGraphErrors* gausspreadbackalta3 = new TGraphErrors(4,x,sigsumbackalta3,0,sigsumerrorbackalta3);
+    TGraphErrors* gausspreadbackaltb3 = new TGraphErrors(4,x,sigsumbackaltb3,0,sigsumerrorbackaltb3);
+    TGraphErrors* gausspreadbackalta4 = new TGraphErrors(4,x,sigsumbackalta4,0,sigsumerrorbackalta4);
+    TGraphErrors* gausspreadbackaltb4 = new TGraphErrors(4,x,sigsumbackaltb4,0,sigsumerrorbackaltb4);
+    
+    SetHist(gausspreada1,"","",2);
+    SetHist(gausspreada2,"","",3);
+    SetHist(gausspreada3,"","",4);
+    SetHist(gausspreada4,"","",6);
+    SetHist(gausspreadb1,"","",2);
+    SetHist(gausspreadb2,"","",3);
+    SetHist(gausspreadb3,"","",4);
+    SetHist(gausspreadb4,"","",6);
+    
+    SetHist(gausspreadbacka1,"","",2);
+    SetHist(gausspreadbacka2,"","",3);
+    SetHist(gausspreadbacka3,"","",4);
+    SetHist(gausspreadbacka4,"","",6);
+    SetHist(gausspreadbackb1,"","",2);
+    SetHist(gausspreadbackb2,"","",3);
+    SetHist(gausspreadbackb3,"","",4);
+    SetHist(gausspreadbackb4,"","",6);
+    
+    SetHist(gausspreadbackalta1,"","",2);
+    SetHist(gausspreadbackalta2,"","",3);
+    SetHist(gausspreadbackalta3,"","",4);
+    SetHist(gausspreadbackalta4,"","",6);
+    SetHist(gausspreadbackaltb1,"","",2);
+    SetHist(gausspreadbackaltb2,"","",3);
+    SetHist(gausspreadbackaltb3,"","",4);
+    SetHist(gausspreadbackaltb4,"","",6);
+    
+    TLegend* legend1 = new TLegend(0.2,.7,0.48,0.9);
+    legend1->SetHeader("Legend");
+    legend1->AddEntry(gausspreada1, "2.5<Ptrig<3.0 GeV/c", "p");
+    legend1->AddEntry(gausspreada2, "3.0<Ptrig<4.0 GeV/c", "p");
+    legend1->AddEntry(gausspreada3, "4.0<Ptrig<6.0 GeV/c", "p");
+    legend1->AddEntry(gausspreada4, "6.0<Ptrig<10.0 GeV/c", "p");
+    
+    
+    
+    TCanvas *C = new TCanvas("C","Gaus-Spread_Combined",200,10,1200,800);
+    C->Divide(2,3);
+    C->cd(1);
+    hDummy->Draw("same");
+    gausspreada1->SetMarkerColor(2);
+    gausspreada1->SetTitle("Raw Data Trigger Spread");
+    gausspreada1->Draw("plsame");
+    gausspreada2->SetMarkerStyle(24);
+    gausspreada2->SetMarkerColor(3);
+    gausspreada2->Draw("plsame");
+    gausspreada3->SetMarkerStyle(33);
+    gausspreada3->SetMarkerColor(4);
+    gausspreada3->Draw("plsame");
+    gausspreada4->SetMarkerStyle(27);
+    gausspreada4->SetMarkerColor(6);
+    gausspreada4->Draw("plsame");
+    legend1->Draw("same");
+    
+    C->cd(2);
+    hDummy->Draw();
+    gausspreadb1->SetMarkerColor(2);
+    gausspreadb1->SetTitle("Raw Data Associated Spread");
+    gausspreadb1->Draw("plsame");
+    gausspreadb2->SetMarkerStyle(24);
+    gausspreadb2->SetMarkerColor(3);
+    gausspreadb2->Draw("plsame");
+    gausspreadb3->SetMarkerStyle(33);
+    gausspreadb3->SetMarkerColor(4);
+    gausspreadb3->Draw("plsame");
+    gausspreadb4->SetMarkerStyle(27);
+    gausspreadb4->SetMarkerColor(6);
+    gausspreadb4->Draw("plsame");
+    legend1->Draw("same");
+    
+    C->cd(3);
+    hDummy->Draw("same");
+    gausspreadbacka1->SetMarkerColor(2);
+    gausspreadbacka1->SetTitle("ZYA1 Trigger Spread");
+    gausspreadbacka1->Draw("plsame");
+    gausspreadbacka2->SetMarkerStyle(24);
+    gausspreadbacka2->SetMarkerColor(3);
+    gausspreadbacka2->Draw("plsame");
+    gausspreadbacka3->SetMarkerStyle(33);
+    gausspreadbacka3->SetMarkerColor(4);
+    gausspreadbacka3->Draw("plsame");
+    gausspreadbacka4->SetMarkerStyle(27);
+    gausspreadbacka4->SetMarkerColor(6);
+    gausspreadbacka4->Draw("plsame");
+    legend1->Draw("same");
+    
+    C->cd(4);
+    hDummy->Draw();
+    gausspreadbackb1->SetMarkerColor(2);
+    gausspreadbackb1->SetTitle("ZYA1 Associated Spread");
+    gausspreadbackb1->Draw("plsame");
+    gausspreadbackb2->SetMarkerStyle(24);
+    gausspreadbackb2->SetMarkerColor(3);
+    gausspreadbackb2->Draw("plsame");
+    gausspreadbackb3->SetMarkerStyle(33);
+    gausspreadbackb3->SetMarkerColor(4);
+    gausspreadbackb3->Draw("plsame");
+    gausspreadbackb4->SetMarkerStyle(27);
+    gausspreadbackb4->SetMarkerColor(6);
+    gausspreadbackb4->Draw("plsame");
+    legend1->Draw("same");
+    
+    C->cd(5);
+    hDummy->Draw("same");
+    gausspreadbackalta1->SetMarkerColor(2);
+    gausspreadbackalta1->SetTitle("ZYAM Trigger Spread");
+    gausspreadbackalta1->Draw("plsame");
+    gausspreadbackalta2->SetMarkerStyle(24);
+    gausspreadbackalta2->SetMarkerColor(3);
+    gausspreadbackalta2->Draw("plsame");
+    gausspreadbackalta3->SetMarkerStyle(33);
+    gausspreadbackalta3->SetMarkerColor(4);
+    gausspreadbackalta3->Draw("plsame");
+    gausspreadbackalta4->SetMarkerStyle(27);
+    gausspreadbackalta4->SetMarkerColor(6);
+    gausspreadbackalta4->Draw("plsame");
+    legend1->Draw("same");
+    
+    C->cd(6);
+    hDummy->Draw();
+    gausspreadbackaltb1->SetMarkerColor(2);
+    gausspreadbackaltb1->SetTitle("ZYAM Associated Spread");
+    gausspreadbackaltb1->Draw("plsame");
+    gausspreadbackaltb2->SetMarkerStyle(24);
+    gausspreadbackaltb2->SetMarkerColor(3);
+    gausspreadbackaltb2->Draw("plsame");
+    gausspreadbackaltb3->SetMarkerStyle(33);
+    gausspreadbackaltb3->SetMarkerColor(4);
+    gausspreadbackaltb3->Draw("plsame");
+    gausspreadbackaltb4->SetMarkerStyle(27);
+    gausspreadbackaltb4->SetMarkerColor(6);
+    gausspreadbackaltb4->Draw("plsame");
+    legend1->Draw("same");
+    
+    
+    
+   //print 3d histo
+    TCanvas *canPart3D = new TCanvas("canPart3D","canPart3D",1000,10,500,1000);
+    //gStyle->SetPalette();
+    gPad->SetLeftMargin(0.15);
+    canPart3D->Divide(1,3);
+    canPart3D->cd(1);
+    //SetHist(hParticleEtaPhi, "x", "y", "z", );
+    hParticleDEtaDPhi->SetContour(28);
+    hParticleDEtaDPhi->Draw("SURF2"); //SURF is draw feature that expands 2D to 3D, sometimes with colors
+    
+    canPart3D->cd(2);
+    hBackgroundDEtaDPhi->SetContour(28);
+    hBackgroundDEtaDPhi->Draw("SURF2");
+    
+    canPart3D->cd(3);
+     hBothDEtaDPhi->SetContour(28);
+    hBothDEtaDPhi->Draw("SURF2");
+    
+    //make and normalize Background generation distributions
+    
+    int Nevents = 100000;
+    hBackgroundpT->Sumw2();
+    hBackgroundpT->Scale(1./(2*TMath::Pi()*hBackgroundpT->GetBinWidth(1)*2.*Nevents)); //50 is current number of events for normalization
+    for (int i = 1;i<=hBackgroundpT->GetNbinsX();i++){
+        float y = hBackgroundpT->GetBinContent(i);
+        float yerr = hBackgroundpT->GetBinError(i);
+        float pTbin = hBackgroundpT->GetBinCenter(i);
+        hBackgroundpT->SetBinContent(i,y/pTbin);
+        hBackgroundpT->SetBinError(i,yerr/pTbin);
+    }
+    
+ 
+    hBackgroundPhi->Sumw2();
+    hBackgroundPhi->Scale(1.0/(Nevents*hBackgroundPhi->GetBinWidth(1)));
+    hBackgroundEta->Sumw2();
+    hBackgroundEta->Scale(1.0/(Nevents*hBackgroundEta->GetBinWidth(1)));
+
+  
+    TCanvas* canBack = new TCanvas("canBack","Background Distributions",1200,400);
+    canBack->Divide(3,1);
+    canBack->cd(1);
+    gPad->SetLeftMargin(0.15);
+    gPad->SetLogy();
+    hBackgroundpT->Draw("ehist");
+    canBack->cd(2);
+    gPad->SetLeftMargin(0.15);
+    hBackgroundPhi->SetMinimum(0);
+    hBackgroundPhi->Draw("ehist");
+    canBack->cd(3);
+    gPad->SetLeftMargin(0.15);
+    hBackgroundEta->Draw("ehist");
+
+    //ASK ROSI HOW MANY NEVENTS TO NORMALIZE TO
+    
+    
+    //make and normalize Pythia generation distributions
+    int Nevents1 = 100000;
+    hParticlepT->Sumw2();
+    hParticlepT->Scale(1./(2*TMath::Pi()*hParticlepT->GetBinWidth(1)*2.*Nevents1)); //50 is current number of events for normalization
+    for (int i = 1;i<=hParticlepT->GetNbinsX();i++){
+        float y = hParticlepT->GetBinContent(i);
+        float yerr = hParticlepT->GetBinError(i);
+        float pTbin = hParticlepT->GetBinCenter(i);
+        hParticlepT->SetBinContent(i,y/pTbin);
+        hParticlepT->SetBinError(i,yerr/pTbin);
+    }
+   
+    
+    hParticlePhi->Sumw2();
+    hParticlePhi->Scale(1.0/(Nevents1*hParticlePhi->GetBinWidth(1)));
+    hParticleEta->Sumw2();
+    hParticleEta->Scale(1.0/(Nevents1*hParticleEta->GetBinWidth(1)));
+   
+   
+    TCanvas* canPart = new TCanvas("canPart","Particle Distributions",1200,400);
+    canPart->Divide(3,1);
+    canPart->cd(1);
+    gPad->SetLeftMargin(0.15);
+    gPad->SetLogy();
+    hParticlepT->Draw("ehist");
+    canPart->cd(2);
+    gPad->SetLeftMargin(0.15);
+    hParticlePhi->SetMinimum(0);
+    hParticlePhi->Draw("ehist");
+    canPart->cd(3);
+    gPad->SetLeftMargin(0.15);
+    hParticleEta->Draw("ehist");
+    
+    
+}
+void set_plot_style()
+{
+    const Int_t NRGBs = 5;
+    const Int_t NCont = 255;
+    Double_t stops[NRGBs] = { 0.00, 0.34, 0.61, 0.84, 1.00 };
+    Double_t red[NRGBs]   = { 0.00, 0.00, 0.87, 1.00, 0.51 };
+    Double_t green[NRGBs] = { 0.00, 0.81, 1.00, 0.20, 0.00 };
+    Double_t blue[NRGBs]  = { 0.51, 1.00, 0.12, 0.00, 0.00 };
+    TColor::CreateGradientColorTable(NRGBs, stops, red, green, blue, NCont);
+    gStyle->SetNumberContours(NCont);
+}
+void SetHist(TH1* h, char* xt ="", char* yt ="",int color = 1, int marker = 20,int width = 3, float size = 1.0)
+{
+    h->SetLineWidth(width);
+    h->SetLineColor(color);
+    h->SetMarkerColor(color);
+    h->SetMarkerSize(size);
+    h->SetMarkerStyle(marker);
+    h->GetYaxis()->SetTitle(yt);
+    h->GetYaxis()->SetTitleOffset(1.6);
+    h->GetXaxis()->SetTitle(xt);
+}
+
+void SetHist(TH1* h, int color = 1)
+{
+    h->SetLineWidth(1);
+    h->SetLineColor(color);
+    h->SetMarkerColor(color);
+    h->SetMarkerSize(1);
+}
+
+//TH2attempt
+
+void SetHist(TH2* h, char* xt ="", char* yt="", char* zt="", int color = 1, int marker = 20, int width = 3, float size = 1.0)
+{
+    h->SetLineWidth(width);
+    h->SetLineColor(color);
+    h->SetMarkerColor(color);
+    h->SetMarkerSize(size);
+    h->SetMarkerStyle(marker);
+    h->GetYaxis()->SetTitle(yt);
+    h->GetYaxis()->SetTitleOffset(1.6);
+    h->GetZaxis()->SetTitle(zt);
+    h->GetZaxis()->SetTitleOffset(1.6);
+    h->GetXaxis()->SetTitle(xt);
+}
+
+void SetLeg(TLegend* l,float txtsize=0.03){
+    l->SetBorderSize(0);
+    l->SetFillColor(0);
+    l->SetTextSize(txtsize);
+}
+
+
+void SetHist(TGraphErrors* h, char* xt ="", char* yt ="",int color = 14, int marker = 20,int width = 2, float size = 1)
+{
+    h->SetLineWidth(width);
+    h->SetLineColor(color);
+    h->SetMarkerColor(1);
+    h->SetMarkerSize(size);
+    h->SetMarkerStyle(marker);
+    h->GetYaxis()->SetTitle(yt);
+    h->GetYaxis()->SetTitleOffset(1.6);
+    h->GetXaxis()->SetTitle(xt);
+}
+
+
+
+
+
+
